@@ -14,7 +14,7 @@ Este repositorio contendrá el material del curso Datos Masivos II.
 	* Algoritmo A Priori 
 	* Market Basquet Analysis
 	* Algoritmos de pasadas limitadas
-  * Algoritmo FP-Growth
+  	* Algoritmo FP-Growth
   
 3. Análisis de Vínculos
 	* Asignación de relevancia (Pagerank)
