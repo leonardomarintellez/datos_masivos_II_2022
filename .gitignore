@@ -1,4 +1,5 @@
 #ignore all ipynb checkppoints
 
 .ipynb_checkpoints
+.Rhistory
 
