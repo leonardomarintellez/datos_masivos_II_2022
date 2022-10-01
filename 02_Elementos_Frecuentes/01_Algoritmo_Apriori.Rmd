@@ -1,0 +1,281 @@
+---
+title: "01 Elementos Frecuentes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Elementos Frecuentes
+
+El análisis de conjuntos frecuentes es uno de los primeros análisis realizado por la _Minería de Datos_.
+
+
+> "La minería de datos, es el proceso que **intenta descubrir patrones** en grandes volúmenes de conjuntos de datos..."
+> -- Edgar Díaz Ordoñez, 2013
+
+
+
+Un análisis derivado del análisis de conjuntos frecuentes es el análisis de reglas de asociación.
+
+**Reglas de asociación**
+
+La asociación en minería de datos es el trabajo de encontrar cuales atributos “van juntos”. Lo más frecuente en el mundo de los negocios, donde se le conoce como análisis de afinidad o market basket analysis, la asociación trata de descubrir las reglas para cuantificar la relación entre dos o más atributos. Las reglas de asociación son de la forma:
+
+_“Si condicionante, a continuación consecuencia.”_
+
+
+Entre los ejemplos de tareas que se resuelven con asociasiones se encuentra:
+
+* Analizar la proporción de suscriptores que responden positivamente una campaña.
+
+* Encontrar artículos que se compran juntos en un supermercado.
+
+
+El famoso ejemplo es "diapers and beer". Una cadena de tiendas descubrió que las personas que compraban pañales inusualmente compraban cerveza. La Teoría es que si compran pañales, hay un bebé en casa y es menos probable beber en un bar y por tanto compran cerveza para beber en casa.
+
+Uno de los problemas para este análisis es que el número de reglas de asociación posibles crece exponencialmente en el número de atributos.
+
+
+Hay principalmente 2 tipos de datos al trabajar con este tipo de análisis, formato tabular y formato transaccional.
+
+
+Un enfoque simple y escalable para analizar canastas es el de **conjuntos frecuentes**.
+
+
+Sea $I = \{ s_{1},s_{2},\cdots,s_{k} \}$ ,  definimos:
+
+**Soporte**
+
+
+El número total de canastas que contienen todos los artículos de $I$ entre el número total de canastas, es decir, la  proporción de canastas que contiene al menos los artículos de $I$. Notar que $s \in (0,1)$.
+
+
+**Conjunto frecuente**
+
+
+Intuitivamente, un conjunto de artícculos que aparece en muchas canastas es frecuente. Formalmente, decimos que un conjunto de artículos es frecuente cuando la proporción de canastas que contienen ese conjunto es mayor a $s$. 
+
+
+
+
+Ejemplos
+```{r message = FALSE}
+#install.packages("arules")
+
+library(tidyverse)
+library(arules)
+```
+
+
+
+```{r}
+lista_ejemplo1 <- list(canasta1=c("pera","manzana","platano"),canasta2=c("pera","manzana"),canasta3=c("manzana","uva"),canasta4=c("manzana","platano"))
+
+lista_ejemplo1
+```
+
+Definir parámetros de la función a utilizar
+```{r results = 'hide'}
+parametros <- list(supp = 0.1, target='frequent itemsets')
+ejemplo1 <- apriori(lista_ejemplo1, parameter = parametros)
+```
+
+```{r}
+inspect(ejemplo1, by ='support')
+```
+
+¿Por qué el soporte de {manzana} es 1?, ¿por qué el soporte de {manzana,platano} es 0.50?
+
+
+
+**Observación**. Si hay m artículos, entonces el número de posibles subconjuntos es $2^m$ (número de elementos del conjunto potencia) y el número total de subconjuntos de tamaño k es $\binom{m}{k}$
+
+
+
+Definir otro umbral para el soporte
+
+
+```{r results = 'hide'}
+parametros <- list(supp = 0.5, target='frequent itemsets')
+ejemplo2 <- apriori(lista_ejemplo1, parameter = parametros)
+```
+
+```{r}
+inspect(ejemplo2, by ='support')
+```
+
+Conservar las canastas con 2 items
+```{r}
+subset(ejemplo2, size(ejemplo2) == 2) %>% inspect(by ="support")
+```
+
+Otra forma de verlo es, definir un soporte $s$ para encontrar items que aparecen en las canastas al menos ${n}\times{s}$ veces, donde $n$ es el número total de canastas. 
+
+
+filtrar canastas que contienen un item en particular
+
+```{r}
+ejemplo1 %>% subset(items %pin% "pera") %>% inspect()
+```
+
+
+### Monotocidad de conjuntos frecuentes
+
+El número de transacciones puede llegar a ser muy grande y las canastas típicamnete pequeñas y el número de artículos distintos puede ser bastante grande. 
+
+Nos interesa resolver el problema de encontrar conjuntos frecuentes. Los algoritmos que se utilizan están diseñados para tratar con las siguientes carácteristicas:
+
+* La lista de transacciones es muy grande y no puede leerse completa en memoria.
+
+* Para una sola canasta es posible calcular de manera rápida todos los subconjuntos de tamaño k, para k $\le$ 4.
+
+* Suponemos que el número de itemsets frecuentes es relativamente chico (lo cual depende de que escojamos un soporte suficientemente alto).
+
+
+
+El principío básico que hace posible hacer los conteos de itemsets frecuentes es:
+
+
+**Monoticidad de itemsets** 
+
+Sea $s$ el nivel de soporte, entonces:
+
+* Si un itemset $I$ es frecuente, entonces todos sus subconujuntos son itemsets frecuentes.
+
+* Equivalentemente, si algún subcojunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente. Así que no es necesario examinar o contar itemsets que contienen al menos un subconjunto que no sea frecuente.
+
+
+El hecho de la monoticidad de itemsets, junto con la selección de un soporte mínimo hace que la busqueda y conteo de itemsets sea un problema factible.  
+
+
+El siguiente ejemplo ayuda a entender mejor el principio de monoticidad 
+
+
+[ejemplo](https://en.wikipedia.org/wiki/Conjunction_fallacy)
+
+```
+Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations.
+
+Which is more probable?
+
+1. Linda is a bank teller.
+2. Linda is a bank teller and is active in the feminist movement.
+```
+
+## Algoritmo a-priori
+
+El algoritmo _a priori_ para reglas de asociación, toma ventaja de la estructura dentro de las propias reglas para reducir el problema de búsqueda a un tamaño más manejable.
+
+Se siguen los siguientes pasos, tomando ventaja de la monoticidad de itemsets:
+
+1. Primero se calculan los artículos frecuentes de tamaño 1, que son los artículos  que aparecen en al menos una proporción $s$ de las canastas.
+
+* Contar candidatos. Esto requiere recorrer el archivo de transacciones y contar todos los artículos.
+
+* Podar. Se examinan los conteos y se seleccionan los artículos que son frecuentes.
+
+
+2. Por principio de monoticidad, ningún par frecuente puede contener un artículo no frecuente, así para calcular pares:
+
+* Se cuentan candidatos, se recorre el archivo de transacciones, para cada transacción, sólo contamos pares candidatos cuyos 2 articulos son artículos frecuentes de paso anterior.
+
+* Poda. Se examinan los conteos y se seleccionan aquellos pares que son frecuentes.
+
+
+Notar que el algoritmo requiere 2 pasadas sobre el conjunto de transacciones.
+
+
+**Observaciones**
+
+1. No es necesario leer todas las transacciones a la vez, se pueden procesar por bloques.
+
+2. Si en la segunda pasada no usaramos monoticidad, tendríamos que mantener conteos de todos los posibles pares. Mantener ese conteo en memoria podría ser díficil si el número de artículos es grande. No obstante, el número de artículos frecuentes generalmente es considerablemente menor. 
+
+
+
+Veamos un ejemplo con mayor número de canastas y artículos
+
+Los datos corresponden a ~10,000 canastas y 169 artículos, son canastas de un supermercado durante un mes.
+
+```{r}
+data(Groceries) # del paquete arules
+canastas <- as(Groceries, 'list')
+
+```
+
+```{r}
+#canastas
+```
+
+
+
+El número de canastas es
+```{r}
+length(canastas)
+```
+
+El promedio deartículos por canastas es:
+```{r}
+ticket_num <- sapply(canastas, length)
+ticket_num %>% mean()
+```
+
+Revisar los artículos más frecuentes.
+```{r results = 'hide'}
+canastas_nest <- data_frame(canasta_id = 1:length(canastas),
+                      articulos = canastas) 
+tabla_canastas <- canastas_nest %>% unnest()
+
+
+num_canastas <- nrow(canastas_nest)
+articulos_frec <- tabla_canastas %>% group_by(articulos) %>%
+                  summarise(n  = n()) %>%
+                  mutate(prop = n / num_canastas) %>%
+                  arrange(desc(n))
+
+```
+
+```{r}
+articulos_frec %>% head(10)
+```
+
+
+```{r}
+articulos_frec %>% tail(10)
+```
+
+
+Usar el paquete arules para sacar itemsets frecuentes
+
+Si usamos soporte = 0.2, ¿cuántos itemsets frecuentes esperamos que haya?
+
+```{r results = 'hide'}
+parametros <- list(supp = 0.2, target='frequent itemsets')
+ejemplo3 <- apriori(canastas, parameter = parametros)
+```
+
+```{r}
+inspect(ejemplo3, by ='support')
+```
+
+¿y si bajamos el soporte a 0.05?
+
+```{r results = 'hide'}
+parametros <- list(supp = 0.05, target='frequent itemsets')
+ejemplo4 <- apriori(canastas, parameter = parametros)
+```
+
+
+```{r}
+inspect(ejemplo4, by ='support') %>% arrange(desc(support))
+```
+
+
+
+
+
+
+
+

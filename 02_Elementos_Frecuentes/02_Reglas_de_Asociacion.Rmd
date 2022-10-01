@@ -1,0 +1,350 @@
+---
+title: "02 Reglas de Asociación"
+author: "Licenciatura en Ciencia de Datos"
+date: "octubre 2022"
+output: 
+  html_document:
+    highlight: haddock
+    number_sections: no
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: '2'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reglas de asociación {-}
+
+Aunque algunas veces lo único que nos interesa es la co-ocurrencia de artículos (por ejemplo, para entender qué artículos se podrían ver afectados por acciones en otros artículos que están en el mismo itemset frecuente), otras veces nos interesa entender qué artículos están asociados a lo largo de canastas por otros factores, como tipo de cliente, tipo de ocasión o propósito (por ejemplo, hora del día, hacer un pastel), etc.
+
+
+Con este propósito podemos organizar la información de los itemsets frecuentes en términos de reglas de asociación. Un ejemplo de una regla de asociación es:
+
+*Entre las personas que compran leche y pan, un 40% compra también yogurt*
+
+---
+
+## Confianza {-}
+
+
+Una **regla de asociación** es una relación de la forma $I\to j$, donde $I$ es un conjunto de artículos (el antecedente) y $j$ es un artículo (el consecuente).
+
+Definimos la **confianza** de esta regla como
+$$Confianza(I\to j) =  \frac{soporte(I\cup {j})}{soporte(I)} = \hat{P}(j|I) = \hat{P}(I\cup j)/\hat{P}(I), $$
+
+
+Es decir, la proporción de canastas que incluyen al itemset $I\cup {j}$  entre las canastas que incluyen al itemset $I$. La confianza siempre está entre 0 y 1.
+
+
+**Observaciones**:
+
+- Por monotonicidad, si  $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces el $soporte(J) \leq soporte(I)$. De forma alternativa, Cada subconjunto de un conjunto frecuente es un conjunto frecuente.
+
+
+**Ejemplo** 
+
+Recordemos nuestro ejemplo de canastas de supermercado, donde el soporte de  {whole milk, yogurt} es 
+de 0.0560, el soporte de {whole milk} es 0.2555, así que la confianza de la regla {whole milk} $\to$ {yogurt} es $\frac{0.0560}{0.2555}=$ `r round(0.0560/0.255,2)`
+
+
+```{r, , warning=FALSE, message=FALSE, echo=FALSE}
+library(methods)
+library(arules)
+library(arulesViz)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+
+```{r}
+data(Groceries) 
+canastas <- as(Groceries, 'list')
+```
+
+
+```{r, message = FALSE, results=FALSE}
+parametros <- list(supp = 0.001, target='frequent itemsets')
+ejemplo <- apriori(canastas, parameter = parametros)
+```
+
+```{r, message = FALSE, results=FALSE}
+tabla_ejemplo <- inspect(ejemplo, by ='support') %>% head(10)
+DT::datatable(tabla_ejemplo) 
+```
+
+ver qué itemsets incluyen algún producto particular
+
+```{r}
+licor <- subset(ejemplo, items %pin% 'liquor')
+sort(licor, by ='support') %>% head %>% DATAFRAME
+```
+
+Así, por ejemplo, la confianza de la regla {liquor} $\to$ {red/blush wine} es $\frac{0.002135231}{0.011082867}=$ `r round(0.002135231/0.011082867,4)`
+
+
+```{r, echo= FALSE}
+vino <- subset(ejemplo, items %pin% 'red/blush wine')
+sort(vino, by ='support') %>% head %>% DATAFRAME
+```
+
+
+Podemos usar la confianza para filtrar reglas que tienen alta probabilidad de cumplirse:
+
+**Ejemplo** 
+
+
+```{r, message = FALSE, results=FALSE}
+pars_reglas <- list(supp = 0.01, confidence = 0.20, target='rules', 
+             ext = TRUE, minlen = 2)
+reglas <- apriori(canastas, parameter = pars_reglas)
+
+pars_soporte <- list(supp = 0.01, target='frequent itemsets')
+soporte <- apriori(canastas, parameter = pars_soporte)
+```
+
+El número de reglas generadas es:
+```{r}
+reglas
+```
+
+
+Podemos examinar algunas de las reglas:
+```{r, message = FALSE, results=FALSE}
+tabla_reglas <- inspect(reglas)
+```
+
+```{r}
+DT::datatable(tabla_reglas)
+```
+
+
+
+En la siguiente tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side). Agregamos también el error estándar de la estimación de confidence (que es una proporción basada en el número de veces que se observa el antecedente):
+
+```{r, warning=FALSE}
+canastas_nest <- data_frame(canasta_id = 1:length(canastas),
+                      articulos = canastas) 
+tabla_canastas <- canastas_nest %>% unnest()
+
+num_canastas <- nrow(canastas_nest)
+
+df_0 <- sort(soporte, by = 'support') %>%
+        DATAFRAME %>% rename(lhs.support = support) %>% select(items,lhs.support)
+
+# Pegarle el soporte del 'antecedente'
+df_1 <- sort(reglas, by = 'confidence') %>%
+        DATAFRAME  %>% 
+        left_join(df_0, by = c("LHS"="items"))
+
+
+df_2 <- df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
+  head(100) %>%
+  mutate(lhs.base = num_canastas*lhs.support) %>%
+  mutate(conf.ee = sqrt(confidence*(1-confidence)/lhs.base)) %>%
+  mutate_if(is.numeric, funs(round(., 2))) 
+
+DT::datatable(df_2)
+```
+
+
+**Observaciones**:
+
+- Este tipo de análisis intenta descubrir asociaciones utiles entre artículos y estas asociaciones son escritas en forma de reglas:  {antecedente} $\to$ {consecuente}, no obstante  se debe tener presente que asociación no implica causalidad como lo podemos ver en los ejemplos de la siguiente página: [Spurious Coorrelations](https://www.tylervigen.com/spurious-correlations)
+
+- Nota que estas tres cantidades están ligadas en cada canasta por $lhs.support\times confidence = support$. 
+
+- Muchas de las reglas con confianza alta tienen como consecuente un artículo de soporte alto (por ejemplo, *whole milk*). Nótese también que las reglas con confianza más alta tienden a tener soporte bajo.
+
+- Confianza alta no necesariamente significa una asociación de los items: si el consecuente $j$ tiene soporte alto, entonces podemos obtener confianza alta aunque no haya asociación.
+
+
+Es natural que artículos frecuentes ocurran en muchas canastas juntas, es decir, que reglas formadas con ellas tengan confianza relativamente alta. Por ejemplo, la regla *pan -> verduras* podría tener confianza y soporte alto, pero esto no indica ninguna asociación especial entre estos artículos. La razón puede ser que *verduras* es un artículo muy común.
+
+---
+
+## Lift {-}
+
+Podemos refinar las reglas de asociación considerando qué tan diferente es $P(j|I)$ de $P(j)$. La primera cantidad es la probabilidad de observar el item $j$ bajo la información de que la canasta contiene a $I$. Si esta cantidad no es muy diferente a $P(j)$, entonces consideramos que esta regla no tiene mucho *interés*. 
+
+
+El **lift** o **intéres** de una regla $I\to j$ se define como
+$$Lift(I\to j) = \frac{Confianza(I\to j)}{Soporte({j})} = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
+es decir, la confianza de la regla $I\to j$ dividida entre la proporción
+de canastas que contienen $j$.
+
+
+Regresemos al ejemplo del licor y vino, el **lift** de la regla {liquor} $\to$ {red/blush wine} es $\frac{0.1926606}{0.019217082}=$ `r round(0.1926606/0.019217082,4)`
+
+
+En nuestro ejemplo, veamos dos reglas con interés muy distinto:
+```{r}
+df_1 <- arrange(df_1, desc(lift))
+df_1[c(4, nrow(df_1)),] %>% select(LHS, RHS, lhs.support, confidence, lift)
+```
+
+La primera regla tiene un interés mucho más alto que la segunda, lo que indica una asociación
+más importante entre los dos artículos. 
+
+
+**Observaciones**
+
+- Cuando decimos que un grupo de artículos están asociados, generalmente
+estamos indicando que forma alguna regla de asociación con **lift** alto.
+
+- En principio también podría haber reglas con *lift* muy por debajo de uno,
+y eso también indica una asociación (por ejemplo coca y pepsi). Pero el método
+de itemsets frecuentes no es muy apropiado para buscar estas reglas, pues precisamente esas reglas tienden a tener soporte y confianza bajas.
+
+- Si el valor del lift es cercano a 1, denota independencia entre el antecedente y el consecuente. Se puede ver como una medida de qué tan lejos de independencia están la ocurrencia de los itemsets $I$ y $j$. 
+
+
+**Ejemplo** 
+```{r, message=FALSE, results=FALSE}
+df_1 %>% arrange(lift)
+```
+
+En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
+
+```{r}
+df_1 %>% select(LHS, RHS, lhs.support, lift, confidence, support) %>%
+  head(100) %>%
+  mutate_if(is.numeric, funs(round(., 2))) %>% 
+DT::datatable()
+
+```
+
+--- 
+
+**Framework inicial de las reglas de asociación**
+
+- En la rimera fase se generan los itemsets frecuentes con soporte $s$ según el algoritmo a priori. Para encontrar las reglas de asociación hacemos:
+- En la segunda fase, las reglas son generadas de los itemsets frecuentes a un nivel de confianza $c$.
+regla de asociación $I\to j$.
+
+Con este proceso encontramos todas las reglas $I\to j$ tales que $I\cup\{j\}$ es un itemset frecuente.
+
+**Dificultades en el análisis de canastas** 
+
+El análisis de canastas es un método rápido y simple que nos da varias maneras de explorar las relaciones entre los artículos. Sin embargo, hay varias dificultades en su aplicación.
+
+**Número de reglas y itemsets** 
+
+Muchas veces encontramos un número muy grande de itemsets o reglas. Hay varias maneras de filtrar estas reglas según el propósito. Si filtramos mucho, perdemos reglas que pueden ser interesantes. Si filtramos poco, es difícil entender globalmente los resultados del análisis.
+
+Un punto de vista es producir una cantidad de reglas para procesar posteriormente con *queries*: por ejemplo, si nos interesa entender las relaciones de **berries** con otros artículos, podemos filtrar las reglas encontradas y examinarlas más fácilmente. 
+
+**Cortes estrictos en el filtrado** 
+
+Cuando seleccionamos valores mínimos de soporte, confianza y/o lift, estas decisiones son más o menos arbitrarias. Distintos analistas pueden llegar a resultados distintos, incluso cuando el propósito del análisis sea similar, y en ocasiones hay que iterar el análisis para encontrar valores adecuados que den *conjuntos razonables con resultados interesantes*.  Este último concepto es subjetivo.
+
+**Redundancia de reglas** 
+
+Existe alguna redundancia en las reglas que encontramos. Por ejemplo, podríamos tener {yogurt, berries} -> {whipped cream}, pero también {yogurt} -> {whipped cream}. Este traslape de reglas hace también difícil entender conjuntos grandes de reglas.
+
+---
+
+**Otras medidas de selección de reglas**
+
+Hay una gran cantidad de medidas de interés de reglas que se han propuesto desde que se usa el análisis de canastas, entre ellas el **hyper-lift** que es una adaptación del lift más robusta para conteos bajos. Para mayor detalle consultar el link: [Measures for Association Rules](https://michael.hahsler.net/research/association_rules/measures.html#hyperLift).
+
+
+```{r, warning=FALSE}
+agregar_hyperlift <- function(reglas, trans){
+  quality(reglas) <- cbind(quality(reglas), 
+	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
+	transactions = trans))
+  reglas
+}
+
+reglas2 <- agregar_hyperlift(reglas, Groceries)
+
+plot(reglas2, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+
+Podemos usar otras medidas que tomen en cuenta la variabilidad de las estimaciones. Por ejemplo, hyper-lift que está basada en modelos simples, que filtran aquellos valores de calidad que están en las colas de las distribuciones.
+
+---
+
+## Visualización de Asociaciones
+
+Tener una visión amplia del market basket analysis es difícil. Un camino a seguir puede ser visualizar los pares con asociación alta:
+
+```{r, warning= FALSE}
+plotly_arules(reglas2, colors=c('red','gray'))
+```
+
+
+En nuestro ejemplo, filtraremos para no tener demasiadas reglas.
+
+
+```{r, , warning=FALSE, message=FALSE, echo=FALSE}
+library(tidygraph)
+library(ggraph)
+```
+
+
+```{r}
+reglas3 <- subset(reglas2, hyper_lift >= 2, confidence > 0.3)
+df_reglas <- reglas3 %>% DATAFRAME %>% rename(from = LHS, to = RHS) 
+df_reglas$weight <- log(df_reglas$hyper_lift)
+nrow(df_reglas)
+```
+
+```{r}
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = 'all'))
+
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=hyper_lift), colour = 'red',arrow = arrow(length = unit(4, 'mm'))) + 
+      geom_node_point(aes(size = centrality, colour = centrality)) + 
+      geom_node_text(aes(label = name), size=4,
+                   colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+Para gráficas más grandes, es mejor usar software especializado ( [Neo4j](https://gephi.org/) o [Gephi](https://gephi.org/) por ejemplo).
+
+
+## Selección de reglas
+
+Ahora discutiremos cómo seleccionar itemsets frecuentes y reglas.
+
+Filtrar con todos estos criterios (soporte, confianza, soporte del antecedente, lift) no es simple, y depende de los objetivos del análisis.  Recordemos también que estos análisis están basados justamente en cortes “duros” de los datos, más o menos arbitrarios, y por lo tanto los resultados son variables. El valor de *confianza* y de *lift* puede ser altamente variable para reglas con soporte bajo. 
+
+- Elegir un valor de soporte mínimo $s$ asegura un número de transacciones relevantes.
+- El criterio de una confianza de al menos $c$ garantiza que la regla tiene suficiente _fuerza_ en términos de probabilidad condicional.
+
+Hay varias maneras de conducir el análisis. Dos tipos útiles son:
+
+- *Itemsets de alta frecuencia*: en este enfoque buscamos reglas con soporte y confianza relativamente altos. Generalmente están asociados a productos muy frecuentes, y nos indica potencial de interacción entre los artículos. Este análisis es más una reexpresión de la información contenida en los itemsets frecuentes. En este caso, podemos filtrar con soporte alto, para evitar estimaciones ruidosas (por ejemplo, soporte  mínimo de 300 canastas).
+
+
+- *Interacciones altas*: en este enfoque donde buscamos entender nichos. Consideramos valores de soporte y confianza más bajos, pero con valores de lift alto. Este análisis es más útil para entender, por ejemplo, propósitos de compras, convivencia de artículos, tipos de comprador, etc.
+
+- *Colección de reglas para hacer querys*:  la colección de reglas puede ser más grande, e incluir por ejemplo resultados de distintas corridas de market basket (incluyendo los dos enfoques de arriba). Las reglas se examinan seleccionando antecedentes o consecuentes, valores altos de soporte, etc, según la pregunta particular que se quiera explorar.
+
+Sin importar el análisis del que se trate, nuestro objetivo es generar valor con los datos. El siguiente flujo se conoce como la cadena de valor de la inteligencia. 
+$${Datos}\to{Información}\to{Conocimiento}\to{Inteligencia}$$
+
+Para una mejor referencia, consultar el artículo del Dr Viterbo Berberena 
+[La Inteligencia Analítica en los Negocios](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwjhjcfq3snsAhUBQKwKHUIpBh4QFjABegQIAxAC&url=https%3A%2F%2Fanalyticsconsultores.com.mx%2Fwp-content%2Fuploads%2F2019%2F02%2F2006.-La-inteligencia-anal%25C3%25ADtica-en-los-negocios.pdf&usg=AOvVaw1bcVn8BS830UxuS03a-dAE)
+
+
+**Otras aplicaciones**  
+
+- Análisis de tablas de variables categóricas: podemos considerar una tabla con varias variables categóricas. Una canasta son los valores que toman las variables. Por ejemplo, podríamos encontrar reglas como {hogar = propio, ocupación=profesional} -> ingreso = alto. 
+
+- Conceptos relacionados: si los artículos son palabras y las canastas documentos (tweets, por ejemplo), este tipo de análisis (una vez que eliminamos las palabras más frecuentes, que no tienen significado como artículos, preposiciones, etc.),  puede mostrar palabras que co-ocurren para formar conceptos relacionados.
+
+- Plagiarismo: si los artículos son documentos y los canastas oraciones, el análisis de canastas puede encontrar documentos que contienen las mismas oraciones. Si varias canastas (oraciones) "contienen" los mismos artículos (documentos), entonces esas oraciones son indicadores de plagio.
