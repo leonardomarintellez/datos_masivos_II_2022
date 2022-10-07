@@ -36,23 +36,18 @@ Con este propósito podemos organizar la información de los itemsets frecuentes
 ## Confianza {-}
 
 
-Una **regla de asociación** es una relación de la forma $I\to j$, donde $I$ es un conjunto de artículos (el antecedente) y $j$ es un artículo (el consecuente).
+Una **regla de asociación** es una relación de la forma $X \to Y$, donde $X$ es un conjunto de artículos (el antecedente) y $Y$ es un artículo (el consecuente).
 
 Definimos la **confianza** de esta regla como
-$$Confianza(I\to j) =  \frac{soporte(I\cup {j})}{soporte(I)} = \hat{P}(j|I) = \hat{P}(I\cup j)/\hat{P}(I), $$
+$$Confianza(X \to Y) =  \frac{soporte(X \cup {Y})}{soporte(X)}$$
 
-
-Es decir, la proporción de canastas que incluyen al itemset $I\cup {j}$  entre las canastas que incluyen al itemset $I$. La confianza siempre está entre 0 y 1.
-
-
-**Observaciones**:
-
-- Por monotonicidad, si  $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces el $soporte(J) \leq soporte(I)$. De forma alternativa, Cada subconjunto de un conjunto frecuente es un conjunto frecuente.
+De forma alternativa, la confiaza puede ser vista como una probabilidad condicional
+$$Confianza(X \to Y) = {P}(Y|X) = \frac{{P}(X \cap Y)}{{P}(X)} $$
 
 
 **Ejemplo** 
 
-Recordemos nuestro ejemplo de canastas de supermercado, donde el soporte de  {whole milk, yogurt} es 
+Del ejemplo de canastas de supermercado, donde el soporte de  {whole milk, yogurt} es 
 de 0.0560, el soporte de {whole milk} es 0.2555, así que la confianza de la regla {whole milk} $\to$ {yogurt} es $\frac{0.0560}{0.2555}=$ `r round(0.0560/0.255,2)`
 
 
@@ -117,6 +112,10 @@ El número de reglas generadas es:
 reglas
 ```
 
+```{r}
+length(reglas)
+```
+
 
 Podemos examinar algunas de las reglas:
 ```{r, message = FALSE, results=FALSE}
@@ -129,7 +128,7 @@ DT::datatable(tabla_reglas)
 
 
 
-En la siguiente tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side). Agregamos también el error estándar de la estimación de confidence (que es una proporción basada en el número de veces que se observa el antecedente):
+En la siguiente tabla, agregamos *lhs.support* que es el soporte del antecedente (lhs = left hand side). 
 
 ```{r, warning=FALSE}
 canastas_nest <- data_frame(canasta_id = 1:length(canastas),
@@ -147,38 +146,85 @@ df_1 <- sort(reglas, by = 'confidence') %>%
         left_join(df_0, by = c("LHS"="items"))
 
 
-df_2 <- df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
-  head(100) %>%
-  mutate(lhs.base = num_canastas*lhs.support) %>%
-  mutate(conf.ee = sqrt(confidence*(1-confidence)/lhs.base)) %>%
-  mutate_if(is.numeric, funs(round(., 2))) 
-
-DT::datatable(df_2)
+DT::datatable(df_1)
 ```
 
 
-**Observaciones**:
-
 - Este tipo de análisis intenta descubrir asociaciones utiles entre artículos y estas asociaciones son escritas en forma de reglas:  {antecedente} $\to$ {consecuente}, no obstante  se debe tener presente que asociación no implica causalidad como lo podemos ver en los ejemplos de la siguiente página: [Spurious Coorrelations](https://www.tylervigen.com/spurious-correlations)
 
-- Nota que estas tres cantidades están ligadas en cada canasta por $lhs.support\times confidence = support$. 
+- Nota que estas tres cantidades están ligadas en cada canasta por $lhs.support \times confidence = support$. 
 
 - Muchas de las reglas con confianza alta tienen como consecuente un artículo de soporte alto (por ejemplo, *whole milk*). Nótese también que las reglas con confianza más alta tienden a tener soporte bajo.
 
-- Confianza alta no necesariamente significa una asociación de los items: si el consecuente $j$ tiene soporte alto, entonces podemos obtener confianza alta aunque no haya asociación.
+- Confianza alta no necesariamente significa una asociación de los items: si el consecuente $Y$ tiene soporte alto, entonces podemos obtener confianza alta aunque no haya asociación.
 
+**Número de reglas**
 
-Es natural que artículos frecuentes ocurran en muchas canastas juntas, es decir, que reglas formadas con ellas tengan confianza relativamente alta. Por ejemplo, la regla *pan -> verduras* podría tener confianza y soporte alto, pero esto no indica ninguna asociación especial entre estos artículos. La razón puede ser que *verduras* es un artículo muy común.
+Otro punto a considerar es el número de reglas el cual crece exponencialmente.
+
+```{r}
+# definir parámetros
+vector_soporte <- seq(from = 0.001, to = 0.05, by = 0.001)
+vector_confianza<- seq(from = 0.05, to = 0.4, by = 0.1)
+k1 <- length(vector_soporte)
+k2 <- length(vector_confianza)
+
+lista_reglas <- vector(length = k1*k2)
+lista_soporte <- vector(length = k1*k2)
+lista_confianza <- vector(length = k1*k2)
+
+```
+
+```{r, results="hide"}
+
+# Iterar sobre los parámetros
+z <- 1
+
+for (i in 1:k1){
+  for (j in 1:k2) {
+    pars_reglas <- list(supp = vector_soporte[i], confidence = vector_confianza[j], target='rules', ext = TRUE, minlen = 2)
+    
+reglas <- apriori(canastas, parameter = pars_reglas)
+  
+# Asignar el número de reglas
+lista_reglas[z] <- length(reglas)
+lista_soporte[z] <- vector_soporte[i]   
+lista_confianza[z] <- vector_confianza[j]   
+
+z <- z + 1    
+  }
+}
+```
+
+```{r}
+df_reglas <- data.frame(soporte = lista_soporte, confianza = lista_confianza, num_reglas = lista_reglas) %>%  arrange(desc(num_reglas)) # %>% arrange(desc(confianza), desc(soporte))
+
+df_reglas %>% head(10)
+```
+
+Graficamos para distintos parámetros. Vemos como el número de reglas en algunos casos incluso supera el número de canastas. 
+
+```{r}
+ggplot(df_reglas) +
+  geom_point(aes(x = soporte, y = num_reglas, color = as.factor(confianza), alpha = 0.85))
+```
+
 
 ---
 
 ## Lift {-}
 
-Podemos refinar las reglas de asociación considerando qué tan diferente es $P(j|I)$ de $P(j)$. La primera cantidad es la probabilidad de observar el item $j$ bajo la información de que la canasta contiene a $I$. Si esta cantidad no es muy diferente a $P(j)$, entonces consideramos que esta regla no tiene mucho *interés*. 
+Podemos refinar las reglas de asociación considerando qué tan diferente es $P(Y|X)$ de $P(Y)$. La primera cantidad es la probabilidad de observar el item $Y$ bajo la información de que la canasta contiene a $X$. 
 
+El **lift**  de una regla $X \to Y$ se define como
+$$Lift(X \to Y) = \frac{Confianza(X \to Y)}{Soporte({Y})} = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
+En términos de probabilidad
 
-El **lift** o **intéres** de una regla $I\to j$ se define como
-$$Lift(I\to j) = \frac{Confianza(I\to j)}{Soporte({j})} = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
+$$Lift(X \to Y) = \frac{Confianza(X \to Y)}{Soporte({Y})}  $$
+En términos de probabilidad
+
+$$Lift(X \to Y) = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
+
 es decir, la confianza de la regla $I\to j$ dividida entre la proporción
 de canastas que contienen $j$.
 

@@ -90,7 +90,7 @@ inspect(ejemplo1, by ='support')
 
 
 
-**Observación**. Si hay m artículos, entonces el número de posibles subconjuntos es $2^m$ (número de elementos del conjunto potencia) y el número total de subconjuntos de tamaño k es $\binom{m}{k}$
+**Observación**. Si hay m artículos, entonces el número de posibles subconjuntos es $2^m - 1$ (número de elementos del conjunto potencia exceptuando el conjunto vacio) y el número total de subconjuntos de tamaño k es $\binom{m}{k}$
 
 
 
@@ -150,20 +150,6 @@ Sea $s$ el nivel de soporte, entonces:
 El hecho de la monoticidad de itemsets, junto con la selección de un soporte mínimo hace que la busqueda y conteo de itemsets sea un problema factible.  
 
 
-El siguiente ejemplo ayuda a entender mejor el principio de monoticidad 
-
-
-[ejemplo](https://en.wikipedia.org/wiki/Conjunction_fallacy)
-
-```
-Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations.
-
-Which is more probable?
-
-1. Linda is a bank teller.
-2. Linda is a bank teller and is active in the feminist movement.
-```
-
 ## Algoritmo a-priori
 
 El algoritmo _a priori_ para reglas de asociación, toma ventaja de la estructura dentro de las propias reglas para reducir el problema de búsqueda a un tamaño más manejable.
@@ -197,7 +183,8 @@ Notar que el algoritmo requiere 2 pasadas sobre el conjunto de transacciones.
 
 Veamos un ejemplo con mayor número de canastas y artículos
 
-Los datos corresponden a ~10,000 canastas y 169 artículos, son canastas de un supermercado durante un mes.
+Los datos corresponden a ~10,000 canastas y 169 artículos, son canastas de un supermercado durante un mes. 
+Los datos pueden ser cargados desde el paquete _arules_ o consultar el siguiente [enlace](https://www.kaggle.com/datasets/irfanasrullah/groceries) para mayor detalle sobre los datos.
 
 ```{r}
 data(Groceries) # del paquete arules
@@ -208,7 +195,6 @@ canastas <- as(Groceries, 'list')
 ```{r}
 #canastas
 ```
-
 
 
 El número de canastas es
@@ -231,17 +217,18 @@ tabla_canastas <- canastas_nest %>% unnest()
 
 num_canastas <- nrow(canastas_nest)
 articulos_frec <- tabla_canastas %>% group_by(articulos) %>%
-                  summarise(n  = n()) %>%
+                  summarise(n  = n(), .groups = 'drop') %>%
                   mutate(prop = n / num_canastas) %>%
                   arrange(desc(n))
 
 ```
 
+
 ```{r}
 articulos_frec %>% head(10)
 ```
 
-
+Los artículos menos frecuentes
 ```{r}
 articulos_frec %>% tail(10)
 ```
@@ -255,6 +242,8 @@ Si usamos soporte = 0.2, ¿cuántos itemsets frecuentes esperamos que haya?
 parametros <- list(supp = 0.2, target='frequent itemsets')
 ejemplo3 <- apriori(canastas, parameter = parametros)
 ```
+
+Sólo obtuvimos 1 itemset {whole milk}, esto es porque sólo solo {whole milk} tiene frecuencia mayor a 2,000.
 
 ```{r}
 inspect(ejemplo3, by ='support')
@@ -272,6 +261,12 @@ ejemplo4 <- apriori(canastas, parameter = parametros)
 inspect(ejemplo4, by ='support') %>% arrange(desc(support))
 ```
 
+Revisar el soporte de {whole milk,yogurt}
+
+```{r}
+ejemplo4 %>% subset(items %pin% 'yogurt' | items %pin% 'whole milk' ) %>% inspect()
+
+```
 
 
 

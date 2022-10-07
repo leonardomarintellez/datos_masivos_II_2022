@@ -424,7 +424,7 @@ ejemplo1 &lt;- apriori(lista_ejemplo1, parameter = parametros)</code></pre>
 ## [8] {manzana,platano}      0.50    0.25                     2    
 ## [9] {manzana,pera,platano} 0.25    0.25                     1</code></pre>
 <p>¿Por qué el soporte de {manzana} es 1?, ¿por qué el soporte de {manzana,platano} es 0.50?</p>
-<p><strong>Observación</strong>. Si hay m artículos, entonces el número de posibles subconjuntos es <span class="math inline">\(2^m\)</span> (número de elementos del conjunto potencia) y el número total de subconjuntos de tamaño k es <span class="math inline">\(\binom{m}{k}\)</span></p>
+<p><strong>Observación</strong>. Si hay m artículos, entonces el número de posibles subconjuntos es <span class="math inline">\(2^m - 1\)</span> (número de elementos del conjunto potencia exceptuando el conjunto vacio) y el número total de subconjuntos de tamaño k es <span class="math inline">\(\binom{m}{k}\)</span></p>
 <p>Definir otro umbral para el soporte</p>
 <pre class="r"><code>parametros &lt;- list(supp = 0.5, target='frequent itemsets')
 ejemplo2 &lt;- apriori(lista_ejemplo1, parameter = parametros)</code></pre>
@@ -465,14 +465,6 @@ ejemplo2 &lt;- apriori(lista_ejemplo1, parameter = parametros)</code></pre>
 <li><p>Equivalentemente, si algún subcojunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente. Así que no es necesario examinar o contar itemsets que contienen al menos un subconjunto que no sea frecuente.</p></li>
 </ul>
 <p>El hecho de la monoticidad de itemsets, junto con la selección de un soporte mínimo hace que la busqueda y conteo de itemsets sea un problema factible.</p>
-<p>El siguiente ejemplo ayuda a entender mejor el principio de monoticidad</p>
-<p><a href="https://en.wikipedia.org/wiki/Conjunction_fallacy">ejemplo</a></p>
-<pre><code>Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations.
-
-Which is more probable?
-
-1. Linda is a bank teller.
-2. Linda is a bank teller and is active in the feminist movement.</code></pre>
 </div>
 </div>
 <div id="algoritmo-a-priori" class="section level2">
@@ -500,9 +492,10 @@ Which is more probable?
 <li><p>Si en la segunda pasada no usaramos monoticidad, tendríamos que mantener conteos de todos los posibles pares. Mantener ese conteo en memoria podría ser díficil si el número de artículos es grande. No obstante, el número de artículos frecuentes generalmente es considerablemente menor.</p></li>
 </ol>
 <p>Veamos un ejemplo con mayor número de canastas y artículos</p>
-<p>Los datos corresponden a ~10,000 canastas y 169 artículos, son canastas de un supermercado durante un mes.</p>
+<p>Los datos corresponden a ~10,000 canastas y 169 artículos, son canastas de un supermercado durante un mes. Los datos pueden ser cargados desde el paquete <em>arules</em> o consultar el siguiente <a href="https://www.kaggle.com/datasets/irfanasrullah/groceries">enlace</a> para mayor detalle sobre los datos.</p>
 <pre class="r"><code>data(Groceries) # del paquete arules
 canastas &lt;- as(Groceries, 'list')</code></pre>
+<pre class="r"><code>#canastas</code></pre>
 <p>El número de canastas es</p>
 <pre class="r"><code>length(canastas)</code></pre>
 <pre><code>## [1] 9835</code></pre>
@@ -522,15 +515,43 @@ ticket_num %&gt;% mean()</code></pre>
 ## Please use `cols = c(articulos)`</code></pre>
 <pre class="r"><code>num_canastas &lt;- nrow(canastas_nest)
 articulos_frec &lt;- tabla_canastas %&gt;% group_by(articulos) %&gt;%
-                  summarise(n  = n()) %&gt;%
+                  summarise(n  = n(), .groups = 'drop') %&gt;%
                   mutate(prop = n / num_canastas) %&gt;%
                   arrange(desc(n))</code></pre>
-<pre><code>## `summarise()` ungrouping output (override with `.groups` argument)</code></pre>
 <pre class="r"><code>articulos_frec %&gt;% head(10)</code></pre>
+<pre><code>## # A tibble: 10 x 3
+##    articulos            n   prop
+##    &lt;chr&gt;            &lt;int&gt;  &lt;dbl&gt;
+##  1 whole milk        2513 0.256 
+##  2 other vegetables  1903 0.193 
+##  3 rolls/buns        1809 0.184 
+##  4 soda              1715 0.174 
+##  5 yogurt            1372 0.140 
+##  6 bottled water     1087 0.111 
+##  7 root vegetables   1072 0.109 
+##  8 tropical fruit    1032 0.105 
+##  9 shopping bags      969 0.0985
+## 10 sausage            924 0.0940</code></pre>
+<p>Los artículos menos frecuentes</p>
+<pre class="r"><code>articulos_frec %&gt;% tail(10)</code></pre>
+<pre><code>## # A tibble: 10 x 3
+##    articulos                 n     prop
+##    &lt;chr&gt;                 &lt;int&gt;    &lt;dbl&gt;
+##  1 salad dressing            8 0.000813
+##  2 whisky                    8 0.000813
+##  3 toilet cleaner            7 0.000712
+##  4 baby cosmetics            6 0.000610
+##  5 frozen chicken            6 0.000610
+##  6 bags                      4 0.000407
+##  7 kitchen utensil           4 0.000407
+##  8 preservation products     2 0.000203
+##  9 baby food                 1 0.000102
+## 10 sound storage medium      1 0.000102</code></pre>
 <p>Usar el paquete arules para sacar itemsets frecuentes</p>
 <p>Si usamos soporte = 0.2, ¿cuántos itemsets frecuentes esperamos que haya?</p>
 <pre class="r"><code>parametros &lt;- list(supp = 0.2, target='frequent itemsets')
 ejemplo3 &lt;- apriori(canastas, parameter = parametros)</code></pre>
+<p>Sólo obtuvimos 1 itemset {whole milk}, esto es porque sólo solo {whole milk} tiene frecuencia mayor a 2,000.</p>
 <pre class="r"><code>inspect(ejemplo3, by ='support')</code></pre>
 <pre><code>##     items        support  transIdenticalToItemsets count
 ## [1] {whole milk} 0.255516 0.255516                 2513</code></pre>
@@ -666,6 +687,20 @@ ejemplo4 &lt;- apriori(canastas, parameter = parametros)</code></pre>
 ## [4]    524
 ## [3]    516
 ## [5]    515</code></pre>
+<p>Revisar el soporte de {whole milk,yogurt}</p>
+<pre class="r"><code>ejemplo4 %&gt;% subset(items %pin% 'yogurt' | items %pin% 'whole milk' ) %&gt;% inspect()</code></pre>
+<pre><code>##     items                         support    transIdenticalToItemsets
+## [1] {yogurt}                      0.13950178 0.010472801             
+## [2] {whole milk}                  0.25551601 0.024402644             
+## [3] {whole milk,yogurt}           0.05602440 0.001931876             
+## [4] {rolls/buns,whole milk}       0.05663447 0.004067107             
+## [5] {other vegetables,whole milk} 0.07483477 0.003762074             
+##     count
+## [1] 1372 
+## [2] 2513 
+## [3]  551 
+## [4]  557 
+## [5]  736</code></pre>
 </div>
 
 
