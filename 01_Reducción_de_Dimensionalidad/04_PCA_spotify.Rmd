@@ -1,0 +1,158 @@
+---
+title: "PCA_Spotify_songs"
+author: "LMT"
+date: "septiembre 2022"
+output: html_document
+---
+
+**Ejercicio**
+
+a) Aplicar Pincipal Component Analysis (PCA) a una playlist de spotify, utilicen una lista propia o uno de los datos ubicados en el repositorio de la clase.
+b) Graficar los 2 primeros componentes principales. Una grafica de scatteplot con las etiquetas del nombre de cada canción.
+
+
+Cargar librerías
+```{r}
+suppressMessages(library(tidyverse))
+suppressMessages(library(corrplot))
+```
+
+
+Leer los datos
+```{r, warning=FALSE}
+datos <- read_delim("/home/leonardo/Documentos/Acatlan/datos/spotify/top_50_global_2022_semana_36.txt", delim = "|") 
+glimpse(datos)
+```
+
+Variables a conservar
+```{r}
+# variables a conservar
+features <- c("danceability","energy","loudness","speechiness","acousticness","instrumentalness","liveness","valence", "duration_ms")
+```
+
+**Breve exploración de los datos**
+
+Revisar la densidad de cada variable
+
+```{r}
+datos %>% select(all_of(features)) %>% 
+  pivot_longer(cols = all_of(features), names_to = "features") %>% 
+  ggplot() +
+    geom_histogram(aes(x = value, fill = features)) +
+    facet_wrap(~features, scales = 'free')
+```
+
+
+Revisar correlación entre variables
+
+```{r}
+#Calcular la matriz de correlación
+M <- datos %>% select(all_of(features)) %>% cor()
+
+# Graficar
+M %>% corrplot.mixed(order = 'FPC')
+```
+
+Restarle la media a cada variable para centrarlas en cero
+
+```{r}
+datos_pca <- datos %>% 
+  select(all_of(features)) %>% 
+  mutate(danceability_pca = danceability - mean(danceability),
+         energy_pca = energy - mean(energy),
+         loudness_pca = (loudness - mean(loudness)),
+         speechiness_pca = speechiness - mean(speechiness),
+         acousticness_pca = acousticness - mean(acousticness),
+         instrumentalness_pca = instrumentalness - mean(instrumentalness),
+         liveness_pca = liveness - mean(liveness),
+         valence_pca = valence - mean(valence),
+         duration_pca = (duration_ms - mean(duration_ms))/100000) %>% 
+        # Conservar las variables transformadas, son las que terminan con '_pca'
+        select(ends_with("_pca"))
+
+glimpse(datos_pca)
+```
+
+```{r}
+# una forma más eficiente de centrar los datos es:
+  # scale(datos %>% all_of(features), scale = FALSE) %>% as.data.frame
+```
+
+
+
+**Aplicar PCA**
+
+```{r}
+spotify_pca <- datos_pca %>% prcomp()
+```
+
+
+Proporción de varianza explicada por cada componente principal
+```{r}
+summary(spotify_pca)
+```
+
+Los objetos que nos regresa la función son
+```{r}
+names(spotify_pca)
+```
+
+Por medio del objeto sdev podemos obtener la varianza explicada por cada componente principal
+
+```{r}
+round((spotify_pca$sdev**2) / sum(spotify_pca$sdev**2),5)
+```
+
+Los eigenvectores son devueltos en el objeto 'rotation', estos son los escalares que se usan para formar la nuevas variables no correlacionadas a partir de las variables originales.
+
+```{r}
+spotify_pca$rotation
+```
+
+**Interpretación**. La primera componente separa las canciones por medio del volumen (loudness), la segunda componente parece oponer valance contra duración.
+
+
+Validemos que las 9 variables nuevas (componentes principales) no están correlacionadas.
+```{r}
+z <- spotify_pca$x
+round(t(z)%*%z,2)
+```
+
+Graficar las 2 primeras componentes
+```{r}
+tablaz <- data.frame(spotify_pca$x)
+datos_proyeccion <- bind_cols((select(datos,artist_name,song_name)),(select(tablaz,PC1,PC2)))
+glimpse(datos_proyeccion)
+```
+
+
+```{r}
+ggplot(datos_proyeccion, aes(x = PC1, y = PC2)) +
+  geom_point() + 
+    geom_hline(yintercept=0, color="orange", size=0.6) + 
+    geom_vline(xintercept=0, color="orange", size=0.6) +
+      geom_text(label = datos_proyeccion$song_name, check_overlap = T)
+```
+
+
+---
+
+Notar que si aplicamos SVD, la matriz V que contiene los vectores singulares derechos de la descomposición de la matriz A, equivalen a los eigenvetores obtenidos previamente aplicando PCA (pca$rotacion).
+
+```{r}
+# Nota. La función svd regresa 3 objetos: 
+        # d: vector con los valores singulares
+        # u: matriz cuyas columnas son los vectores singulares izquierdos 
+        # v: matriz cuyas columnas son los vectores singulares derechos.  
+svd_A <- svd(datos_pca)
+
+```
+
+
+```{r}
+#Notar que el objeto devuelto en la matrix V, es la matriz V y no la matriz V transpuesta.
+svd_A$v
+```
+
+
+
