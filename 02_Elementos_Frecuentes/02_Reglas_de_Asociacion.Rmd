@@ -217,15 +217,13 @@ ggplot(df_reglas) +
 Podemos refinar las reglas de asociación considerando qué tan diferente es $P(Y|X)$ de $P(Y)$. La primera cantidad es la probabilidad de observar el item $Y$ bajo la información de que la canasta contiene a $X$. 
 
 El **lift**  de una regla $X \to Y$ se define como
-$$Lift(X \to Y) = \frac{Confianza(X \to Y)}{Soporte({Y})} = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
+$$Lift(X \to Y) = \frac{Confianza(X \to Y)}{Soporte({Y})}$$
 En términos de probabilidad
 
-$$Lift(X \to Y) = \frac{Confianza(X \to Y)}{Soporte({Y})}  $$
-En términos de probabilidad
+$$Lift(X \to Y) = \frac{{P}({Y}|X)}{{P}({Y})}$$
 
-$$Lift(X \to Y) = \frac{\hat{P}({j}|I)}{\hat{P}({j})}$$
 
-es decir, la confianza de la regla $I\to j$ dividida entre la proporción
+es decir, la confianza de la regla $X \to Y$ dividida entre la proporción
 de canastas que contienen $j$.
 
 
@@ -251,7 +249,7 @@ estamos indicando que forma alguna regla de asociación con **lift** alto.
 y eso también indica una asociación (por ejemplo coca y pepsi). Pero el método
 de itemsets frecuentes no es muy apropiado para buscar estas reglas, pues precisamente esas reglas tienden a tener soporte y confianza bajas.
 
-- Si el valor del lift es cercano a 1, denota independencia entre el antecedente y el consecuente. Se puede ver como una medida de qué tan lejos de independencia están la ocurrencia de los itemsets $I$ y $j$. 
+- Si el valor del lift es cercano a 1, denota independencia entre el antecedente y el consecuente. Se puede ver como una medida de qué tan lejos de independencia están la ocurrencia de los itemsets $X$ y $Y$. 
 
 
 **Ejemplo** 
@@ -275,9 +273,9 @@ DT::datatable()
 
 - En la rimera fase se generan los itemsets frecuentes con soporte $s$ según el algoritmo a priori. Para encontrar las reglas de asociación hacemos:
 - En la segunda fase, las reglas son generadas de los itemsets frecuentes a un nivel de confianza $c$.
-regla de asociación $I\to j$.
+regla de asociación $X\to Y$.
 
-Con este proceso encontramos todas las reglas $I\to j$ tales que $I\cup\{j\}$ es un itemset frecuente.
+Con este proceso encontramos todas las reglas $X \to Y$ tales que ${X \cup Y}$ es un itemset frecuente.
 
 **Dificultades en el análisis de canastas** 
 
@@ -301,65 +299,12 @@ Existe alguna redundancia en las reglas que encontramos. Por ejemplo, podríamos
 
 **Otras medidas de selección de reglas**
 
-Hay una gran cantidad de medidas de interés de reglas que se han propuesto desde que se usa el análisis de canastas, entre ellas el **hyper-lift** que es una adaptación del lift más robusta para conteos bajos. Para mayor detalle consultar el link: [Measures for Association Rules](https://michael.hahsler.net/research/association_rules/measures.html#hyperLift).
+Hay una gran cantidad de medidas de interés de reglas que se han propuesto desde que se usa el análisis de canastas, entre ellas el **hyper-lift** que es una adaptación del lift más robusta para conteos bajos. Para mayor detalle consultar el link: [Measures for Association Rules](https://mhahsler.github.io/arules/docs/measures), entre otras.
 
-
-```{r, warning=FALSE}
-agregar_hyperlift <- function(reglas, trans){
-  quality(reglas) <- cbind(quality(reglas), 
-	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
-	transactions = trans))
-  reglas
-}
-
-reglas2 <- agregar_hyperlift(reglas, Groceries)
-
-plot(reglas2, measure=c('lift','hyper_lift'), shading = 'support')
-```
-
-
-Podemos usar otras medidas que tomen en cuenta la variabilidad de las estimaciones. Por ejemplo, hyper-lift que está basada en modelos simples, que filtran aquellos valores de calidad que están en las colas de las distribuciones.
 
 ---
 
-## Visualización de Asociaciones
 
-Tener una visión amplia del market basket analysis es difícil. Un camino a seguir puede ser visualizar los pares con asociación alta:
-
-```{r, warning= FALSE}
-plotly_arules(reglas2, colors=c('red','gray'))
-```
-
-
-En nuestro ejemplo, filtraremos para no tener demasiadas reglas.
-
-
-```{r, , warning=FALSE, message=FALSE, echo=FALSE}
-library(tidygraph)
-library(ggraph)
-```
-
-
-```{r}
-reglas3 <- subset(reglas2, hyper_lift >= 2, confidence > 0.3)
-df_reglas <- reglas3 %>% DATAFRAME %>% rename(from = LHS, to = RHS) 
-df_reglas$weight <- log(df_reglas$hyper_lift)
-nrow(df_reglas)
-```
-
-```{r}
-graph_1 <- as_tbl_graph(df_reglas) %>%
-  mutate(centrality = centrality_degree(mode = 'all'))
-
-ggraph(graph_1, layout = 'fr', start.temp=100) +
-  geom_edge_link(aes(alpha=hyper_lift), colour = 'red',arrow = arrow(length = unit(4, 'mm'))) + 
-      geom_node_point(aes(size = centrality, colour = centrality)) + 
-      geom_node_text(aes(label = name), size=4,
-                   colour = 'gray20', repel=TRUE) +
-  theme_graph()
-```
-
-Para gráficas más grandes, es mejor usar software especializado ( [Neo4j](https://gephi.org/) o [Gephi](https://gephi.org/) por ejemplo).
 
 
 ## Selección de reglas
@@ -380,17 +325,20 @@ Hay varias maneras de conducir el análisis. Dos tipos útiles son:
 
 - *Colección de reglas para hacer querys*:  la colección de reglas puede ser más grande, e incluir por ejemplo resultados de distintas corridas de market basket (incluyendo los dos enfoques de arriba). Las reglas se examinan seleccionando antecedentes o consecuentes, valores altos de soporte, etc, según la pregunta particular que se quiera explorar.
 
+---
+
 Sin importar el análisis del que se trate, nuestro objetivo es generar valor con los datos. El siguiente flujo se conoce como la cadena de valor de la inteligencia. 
+
 $${Datos}\to{Información}\to{Conocimiento}\to{Inteligencia}$$
 
 Para una mejor referencia, consultar el artículo del Dr Viterbo Berberena 
-[La Inteligencia Analítica en los Negocios](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwjhjcfq3snsAhUBQKwKHUIpBh4QFjABegQIAxAC&url=https%3A%2F%2Fanalyticsconsultores.com.mx%2Fwp-content%2Fuploads%2F2019%2F02%2F2006.-La-inteligencia-anal%25C3%25ADtica-en-los-negocios.pdf&usg=AOvVaw1bcVn8BS830UxuS03a-dAE)
+**La Inteligencia Analítica en los Negocios**
 
 
 **Otras aplicaciones**  
 
 - Análisis de tablas de variables categóricas: podemos considerar una tabla con varias variables categóricas. Una canasta son los valores que toman las variables. Por ejemplo, podríamos encontrar reglas como {hogar = propio, ocupación=profesional} -> ingreso = alto. 
 
-- Conceptos relacionados: si los artículos son palabras y las canastas documentos (tweets, por ejemplo), este tipo de análisis (una vez que eliminamos las palabras más frecuentes, que no tienen significado como artículos, preposiciones, etc.),  puede mostrar palabras que co-ocurren para formar conceptos relacionados.
+- Venta cruzada: técnica para vender productos complementarios. 
 
-- Plagiarismo: si los artículos son documentos y los canastas oraciones, el análisis de canastas puede encontrar documentos que contienen las mismas oraciones. Si varias canastas (oraciones) "contienen" los mismos artículos (documentos), entonces esas oraciones son indicadores de plagio.
+
